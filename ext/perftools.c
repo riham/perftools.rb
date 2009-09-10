@@ -1,9 +1,15 @@
 #include <ruby.h>
+#if HAVE_RB_THREAD_BLOCKING_REGION
 #include <node.h>
 #include <env.h>
+#else
+#include <vm_core.h>
+#endif
 
 static VALUE Iallocate;
 static VALUE I__send__;
+
+#if HAVE_RB_THREAD_BLOCKING_REGION
 
 static inline void
 save_frame(struct FRAME *frame, void** result, int *depth)
@@ -73,6 +79,37 @@ rb_stack_trace(void** result, int max_depth)
 
   return depth;
 }
+
+#else
+int rb_stack_trace(void** result, int max_depth)
+{
+    rb_thread_t *th = GET_THREAD();
+    int depth = 0;
+    const rb_control_frame_t *cfp = th->cfp;
+    const rb_control_frame_t *top_of_cfp = RUBY_VM_END_CONTROL_FRAME(th);
+
+    int i;
+    for(i=0; i < 2; i++)
+      top_of_cfp = RUBY_VM_PREVIOUS_CONTROL_FRAME(top_of_cfp);
+
+    while (cfp < top_of_cfp && depth+3 < max_depth) {
+        if (cfp->iseq != 0) {
+           if (cfp->pc != 0) {
+                rb_iseq_t *iseq = cfp->iseq;
+                result[depth++] = 0;
+                result[depth++] = iseq->klass;
+                result[depth++] = iseq->defined_method_id;
+           }
+        }else if (RUBYVM_CFUNC_FRAME_P(cfp)) {
+            result[depth++] = 0;
+            result[depth++] = cfp->method_class;
+            result[depth++] = cfp->method_id;
+        }
+    }
+    return depth;
+}
+#endif
+
 
 static VALUE cPerfTools;
 static VALUE cCpuProfiler;

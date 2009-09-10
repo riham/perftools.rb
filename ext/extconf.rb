@@ -1,7 +1,14 @@
 require 'mkmf'
 
-if have_func('rb_thread_blocking_region')
-  raise 'Ruby 1.9 is not supported yet'
+if RUBY_VERSION >= "1.9"
+  begin 
+    require "ruby_core_source"
+  rescue LoadError
+    STDERR.print("Makefile creation failed\n\n")
+    STDERR.print("Please note that for ruby-1.9 you need the following gems installed: archive-tar-minitar, ruby_core_source  \n\n")
+    STDERR.print("Those gems are not installed as dependency as ruby_core_source will install ruby header files into your ruby directory. Those headers are yet subject to change according to matz, yet they are currently needed for perftools  \n\n")        
+    exit(1)
+  end
 end
 
 require 'fileutils'
@@ -63,5 +70,18 @@ when /darwin/, /linux/
 end
 
 $libs = append_library($libs, 'rubyprofiler')
-have_func('rb_during_gc', 'ruby.h')
-create_makefile 'perftools'
+if RUBY_VERSION >= "1.9"
+   hdrs = proc {
+    have_header("vm_core.h") and have_header("iseq.h") and have_header("insns.inc") and 
+    have_header("insns_info.inc")
+  }
+
+  if !Ruby_core_source::create_makefile_with_core( hdrs, "perftools.rb")
+    STDERR.print("Makefile creation failed\n")
+    STDERR.print("*************************************************************\n\n")
+  exit(1)
+  end 
+else 
+  have_func('rb_during_gc', 'ruby.h')
+  create_makefile 'perftools'
+end
